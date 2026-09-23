@@ -1,0 +1,216 @@
+# ======================================
+# Weather Data Pipeline - Git Ignore
+# ======================================
+
+# ======================================
+# Sensitive Files - NEVER COMMIT THESE!
+# ======================================
+.env
+credentials/
+*.json
+!dbt/packages.json
+!great_expectations/great_expectations.yml
+gcp-credentials.json
+service-account-key.json
+
+# API Keys
+*api_key*
+*apikey*
+
+# ======================================
+# Python
+# ======================================
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+pytest.ini
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pyenv
+.python-version
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# ======================================
+# Airflow
+# ======================================
+airflow/logs/
+airflow/airflow.db
+airflow/airflow.cfg
+airflow/webserver_config.py
+airflow/airflow-webserver.pid
+airflow/standalone_admin_password.txt
+airflow/*.log
+airflow/*.pid
+
+# ======================================
+# dbt
+# ======================================
+dbt/target/
+dbt/dbt_packages/
+dbt/logs/
+dbt/.user.yml
+
+# ======================================
+# Great Expectations
+# ======================================
+great_expectations/uncommitted/
+great_expectations/plugins/
+great_expectations/.ge_store_backend_id
+
+# ======================================
+# Docker
+# ======================================
+docker-compose.override.yml
+*.log
+
+# ======================================
+# IDEs and Editors
+# ======================================
+# VSCode
+.vscode/
+*.code-workspace
+
+# PyCharm
+.idea/
+*.iml
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
+*.swp
+*.swo
+*~
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+
+# ======================================
+# OS Files
+# ======================================
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+.Trash-*
+
+# ======================================
+# Temporary Files
+# ======================================
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+*~.nib
+*.orig
+
+# ======================================
+# Data Files (optional - uncomment if needed)
+# ======================================
+# data/raw/
+# data/processed/
+# *.csv
+# *.parquet
+# *.json
+
+# ======================================
+# Logs
+# ======================================
+*.log
+logs/
+log/
+
+# ======================================
+# Database Files
+# ======================================
+*.db
+*.sqlite
+*.sqlite3
+
+# ======================================
+# Documentation Build
+# ======================================
+docs/_build/
+site/
+
+# ======================================
+# Secrets and Keys
+# ======================================
+.secrets/
+*.pem
+*.key
+*.p12
+*.jks
+
+# ======================================
+# Streamlit
+# ======================================
+.streamlit/secrets.toml
+
+# ======================================
+# Misc
+# ======================================
+.DS_Store
+node_modules/
+package-lock.json
+yarn.lock

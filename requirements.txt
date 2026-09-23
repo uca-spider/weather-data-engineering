@@ -1,0 +1,103 @@
+# ======================================
+# Weather Data Pipeline - Python Dependencies
+# ======================================
+# Install: pip install -r requirements.txt
+
+# ======================================
+# Core Dependencies
+# ======================================
+python-dotenv==1.0.0          # Environment variable management
+
+# ======================================
+# Apache Airflow
+# ======================================
+apache-airflow==2.8.1
+apache-airflow-providers-google==10.14.0  # BigQuery provider
+
+# ======================================
+# Google Cloud Platform
+# ======================================
+google-cloud-bigquery==3.14.1
+google-cloud-bigquery-storage==2.24.0
+google-auth==2.27.0
+google-auth-oauthlib==1.2.0
+
+# ======================================
+# dbt (Data Build Tool)
+# ======================================
+dbt-core==1.7.7
+dbt-bigquery==1.7.4
+
+# ======================================
+# Data Quality
+# ======================================
+great-expectations==0.18.8
+
+# ======================================
+# Data Processing
+# ======================================
+pandas==2.1.4
+numpy==1.26.3
+
+# ======================================
+# API Clients & HTTP
+# ======================================
+requests==2.31.0
+urllib3==2.1.0
+
+# ======================================
+# Visualization (Streamlit)
+# ======================================
+streamlit==1.30.0
+plotly==5.18.0
+altair==5.2.0
+
+# ======================================
+# Testing
+# ======================================
+pytest==7.4.4
+pytest-cov==4.1.0
+pytest-mock==3.12.0
+
+# ======================================
+# Code Quality
+# ======================================
+black==24.1.1                 # Code formatter
+flake8==7.0.0                 # Linter
+mypy==1.8.0                   # Type checker
+isort==5.13.2                 # Import sorter
+
+# ======================================
+# Utilities
+# ======================================
+python-dateutil==2.8.2
+pytz==2024.1
+pyyaml==6.0.1
+
+# ======================================
+# Logging & Monitoring
+# ======================================
+loguru==0.7.2
+
+# ======================================
+# Database (for Airflow metadata - handled by Docker)
+# ======================================
+# psycopg2-binary==2.9.9      # PostgreSQL adapter (included in Airflow)
+
+# ======================================
+# Optional: Development Tools
+# ======================================
+ipython==8.20.0               # Enhanced Python shell
+jupyter==1.0.0                # Jupyter notebooks
+jupyterlab==4.0.11
+
+# ======================================
+# Optional: Additional Connectors
+# ======================================
+# slack-sdk==3.26.2           # Slack notifications
+# sendgrid==6.11.0            # Email notifications
+
+# ======================================
+# Pinned Sub-dependencies (for stability)
+# ======================================
+sqlalchemy==1.4.51            # Required by Airflow (not 2.0+)
