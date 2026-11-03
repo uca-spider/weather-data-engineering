@@ -1,0 +1,145 @@
+# ============================================
+# Weather Data Pipeline - Docker Compose
+# ============================================
+# Simplified version for Sprint 1 learning
+
+# ============================================
+# SHARED CONFIGURATION
+# ============================================
+x-airflow-common:
+  &airflow-common
+  image: apache/airflow:2.8.1-python3.11
+
+  environment:
+    &airflow-common-env
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+    AIRFLOW__WEBSERVER__SECRET_KEY: 'your_secret_key_change_in_production'
+    AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session'
+
+    # GCP Configuration (will add later)
+    GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS:-/opt/airflow/credentials/gcp-credentials.json}
+    GCP_PROJECT_ID: ${GCP_PROJECT_ID}
+    GCP_DATASET_ID: ${GCP_DATASET_ID:-weather_data}
+
+
+    # Weather API
+    OPENWEATHER_API_KEY: ${OPENWEATHER_API_KEY:-your_key}
+
+    # Timezone
+    AIRFLOW__CORE__DEFAULT_TIMEZONE: Asia/Jakarta
+
+  volumes:
+    - ./airflow/dags:/opt/airflow/dags
+    - ./airflow/logs:/opt/airflow/logs
+    - ./airflow/plugins:/opt/airflow/plugins
+    - ./src:/opt/airflow/src
+    - ./credentials:/opt/airflow/credentials
+
+  user: "${AIRFLOW_UID:-50000}:0"
+
+  depends_on:
+    &airflow-common-depends-on
+    postgres:
+      condition: service_healthy
+
+# ============================================
+# SERVICES
+# ============================================
+services:
+
+  # PostgreSQL - Airflow Metadata Database
+  postgres:
+    image: postgres:14
+    container_name: weather_postgres
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - postgres-db-volume:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: always
+
+  # Airflow Webserver - UI
+  airflow-webserver:
+    <<: *airflow-common
+    container_name: weather_airflow_webserver
+    command: webserver
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+
+  # Airflow Scheduler
+  airflow-scheduler:
+    <<: *airflow-common
+    container_name: weather_airflow_scheduler
+    command: scheduler
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8974/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+
+  # Airflow Init - One-time Setup
+  airflow-init:
+    <<: *airflow-common
+    container_name: weather_airflow_init
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        # Run as airflow user
+        function run_as_airflow() {
+          airflow db migrate
+          airflow users create \
+            --username airflow \
+            --firstname Airflow \
+            --lastname Admin \
+            --role Admin \
+            --email admin@example.com \
+            --password airflow || echo "User already exists"
+        }
+
+        run_as_airflow
+
+        echo "===================================="
+        echo "✅ Airflow initialization complete!"
+        echo "Access UI at: http://localhost:8080"
+        echo "Username: airflow"
+        echo "Password: airflow"
+        echo "===================================="
+    environment:
+      <<: *airflow-common-env
+      _AIRFLOW_DB_UPGRADE: 'true'
+      _AIRFLOW_WWW_USER_CREATE: 'true'
+
+# ============================================
+# VOLUMES
+# ============================================
+volumes:
+  postgres-db-volume:
