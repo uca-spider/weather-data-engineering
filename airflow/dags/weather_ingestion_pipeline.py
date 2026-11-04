@@ -189,8 +189,23 @@ with DAG(
         python_callable=load_to_bq,
         provide_context=True,
     )
+
+    # Task 4: Run dbt transformations & tests
+    dbt_task = BashOperator(
+        task_id='run_dbt_transformations',
+        bash_command="""
+            set -e
+            echo "🚀 Running dbt transformations..."
+            cd /opt/airflow/dbt/weather_dbt
+            dbt run --profiles-dir /opt/airflow/dbt/weather_dbt
+            echo "🔍 Running dbt tests..."
+            dbt test --profiles-dir /opt/airflow/dbt/weather_dbt
+            echo "✅ dbt transformations & tests completed successfully!"
+        """,
+    )
+
     
-    # Task 4: Log summary
+    # Task 5: Log summary
     summary_task = PythonOperator(
         task_id='log_summary',
         python_callable=log_pipeline_summary,
@@ -198,7 +213,8 @@ with DAG(
     )
     
     # Define task dependencies
-    fetch_task >> validate_task >> load_task >> summary_task
+    fetch_task >> validate_task >> load_task >> dbt_task >> summary_task
+
 
 
 # DAG Flow:

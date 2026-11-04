@@ -8,13 +8,18 @@
 # ============================================
 x-airflow-common:
   &airflow-common
-  image: apache/airflow:2.8.1-python3.11
+  build:
+    context: .
+    dockerfile: Dockerfile
+  image: weather-airflow:2.8.1-dbt
+
 
   environment:
     &airflow-common-env
     AIRFLOW__CORE__EXECUTOR: LocalExecutor
     AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
+    AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: 'true'
     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
     AIRFLOW__WEBSERVER__SECRET_KEY: 'your_secret_key_change_in_production'
     AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session'
@@ -37,6 +42,8 @@ x-airflow-common:
     - ./airflow/plugins:/opt/airflow/plugins
     - ./src:/opt/airflow/src
     - ./credentials:/opt/airflow/credentials
+    - ./dbt:/opt/airflow/dbt
+
 
   user: "${AIRFLOW_UID:-50000}:0"
 

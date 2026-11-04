@@ -1,0 +1,19 @@
+version: 2
+
+sources:
+  - name: raw_weather
+    database: weather-513509
+    schema: weather_data
+    description: "Raw weather data ingested from OpenWeatherMap by Airflow"
+    tables:
+      - name: raw_weather_data
+        description: "Partitioned table containing raw API responses"
+        columns:
+          - name: city
+            description: "City name"
+          - name: timestamp
+            description: "Observation timestamp"
+          - name: temperature
+            description: "Temperature in Celsius"
+          - name: humidity
+            description: "Humidity percentage"

@@ -1,0 +1,66 @@
+version: 2
+
+models:
+  - name: dim_cities
+    description: "City dimension table"
+    columns:
+      - name: city_id
+        description: "Primary key: MD5 hash of city name"
+        tests:
+          - unique
+          - not_null
+      - name: city_name
+        tests:
+          - unique
+          - not_null
+
+  - name: dim_dates
+    description: "Date dimension table"
+    columns:
+      - name: date_id
+        description: "Primary key: YYYYMMDD integer"
+        tests:
+          - unique
+          - not_null
+      - name: full_date
+        tests:
+          - unique
+          - not_null
+
+  - name: fact_weather_observations
+    description: "Fact table for weather observations"
+    columns:
+      - name: observation_id
+        tests:
+          - unique
+          - not_null
+      - name: city_id
+        description: "Foreign key to dim_cities"
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_cities')
+              field: city_id
+      - name: date_id
+        description: "Foreign key to dim_dates"
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_dates')
+              field: date_id
+      - name: temperature
+        tests:
+          - not_null
+
+  - name: agg_daily_weather
+    description: "Daily aggregated weather metrics per city"
+    columns:
+      - name: city_id
+        tests:
+          - not_null
+      - name: observation_date
+        tests:
+          - not_null
+      - name: total_observations
+        tests:
+          - not_null
