@@ -22,6 +22,8 @@ sys.path.insert(0, '/opt/airflow/src')
 
 from ingestion.weather_fetcher import fetch_weather_data, INDONESIAN_CITIES
 from ingestion.bigquery_loader import load_to_bigquery
+from validation.weather_quality_checker import WeatherQualityChecker
+
 
 
 def fetch_weather(**context):
@@ -125,16 +127,36 @@ def load_to_bq(**context):
     return rows_inserted
 
 
-def log_pipeline_summary(**context):
-    """Task 4: Log pipeline execution summary"""
+def run_quality_checks(**context):
+    """Task 5: Run data quality and observability audit"""
     print("=" * 60)
-    print("📊 TASK 4: Pipeline Summary")
+    print("🛡️  TASK 5: Running Data Quality Audit")
+    print("=" * 60)
+    
+    checker = WeatherQualityChecker()
+    score, checks, has_failure = checker.run_all_checks()
+    
+    # Simpan skor mutu ke XCom agar bisa dibaca task ringkasan
+    context['task_instance'].xcom_push(key='quality_score', value=score)
+    
+    if has_failure:
+        raise ValueError(f"❌ Critical data quality failure! Score: {score}/100")
+    
+    print(f"\n✅ Data quality audit passed with score: {score}/100")
+    return score
+
+
+def log_pipeline_summary(**context):
+    """Task 6: Log pipeline execution summary"""
+    print("=" * 60)
+    print("📊 TASK 6: Pipeline Summary")
     print("=" * 60)
     
     # Get results from previous tasks
     cities_fetched = context['task_instance'].xcom_pull(task_ids='fetch_weather')
     cities_validated = context['task_instance'].xcom_pull(task_ids='validate_data')
     rows_loaded = context['task_instance'].xcom_pull(task_ids='load_to_bigquery')
+    quality_score = context['task_instance'].xcom_pull(task_ids='run_data_quality_checks', key='quality_score')
     
     execution_date = context['execution_date']
     
@@ -142,10 +164,12 @@ def log_pipeline_summary(**context):
     print(f"✅ Cities Fetched: {cities_fetched}")
     print(f"✅ Cities Validated: {cities_validated}")
     print(f"✅ Rows Loaded: {rows_loaded}")
+    print(f"🛡️  Quality Score: {quality_score}/100")
     print(f"\n🎉 Pipeline executed successfully!")
     print("=" * 60)
     
     return "success"
+
 
 
 # Default arguments
@@ -203,9 +227,15 @@ with DAG(
             echo "✅ dbt transformations & tests completed successfully!"
         """,
     )
-
     
-    # Task 5: Log summary
+    # Task 5: Run data quality checks
+    quality_task = PythonOperator(
+        task_id='run_data_quality_checks',
+        python_callable=run_quality_checks,
+        provide_context=True,
+    )
+
+    # Task 6: Log summary
     summary_task = PythonOperator(
         task_id='log_summary',
         python_callable=log_pipeline_summary,
@@ -213,7 +243,7 @@ with DAG(
     )
     
     # Define task dependencies
-    fetch_task >> validate_task >> load_task >> dbt_task >> summary_task
+    fetch_task >> validate_task >> load_task >> dbt_task >> quality_task >> summary_task
 
 
 
