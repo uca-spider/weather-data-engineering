@@ -93,6 +93,10 @@ airflow/*.pid
 # dbt
 # ======================================
 dbt/target/
+dbt/**/target/
+.playwright-mcp/
+*.yml.bak
+dashboard-before.*
 dbt/dbt_packages/
 dbt/logs/
 dbt/.user.yml
