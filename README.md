@@ -1,306 +1,171 @@
-# 🌦️ Weather Data Engineering Pipeline
+# Weather Data Pipeline: OpenWeatherMap to BigQuery
 
-**End-to-End Data Engineering Portfolio Project**
+A batch ELT pipeline that collects current weather for five Indonesian cities every 6 hours, loads it into **BigQuery**, models it with **dbt**, and checks its health with an automated **data quality audit**. **Apache Airflow** (Docker Compose) orchestrates everything, and a **Streamlit** dashboard reads the results.
 
-Modern data pipeline showcasing real-world data engineering practices with cloud-native architecture, automated orchestration, data quality validation, and analytics dashboard.
+**Status:** runs end to end locally with Docker Compose. It has been running on a 6-hour schedule since 2 November 2026. It is a portfolio project, not a hosted production service.
 
-## 📊 Project Overview
+## Results so far
 
-This project demonstrates a production-ready weather data pipeline that:
-- Ingests data from multiple weather APIs
-- Processes and validates data quality
-- Stores in cloud data warehouse (BigQuery)
-- Transforms data using modern analytics engineering (dbt)
-- Validates data quality (Great Expectations)
-- Visualizes insights through interactive dashboard (Streamlit)
-- Orchestrates everything with Apache Airflow
+> Fill in the numbers from your own BigQuery and Airflow after checking them. Delete any line you cannot verify.
 
-### 🎯 Key Features
+| Metric | Value |
+|--------|-------|
+| Cities covered | 5 (Jakarta, Surabaya, Bandung, Medan, Makassar) |
+| Schedule | every 6 hours (`0 */6 * * *`) |
+| Rows in `raw_weather_data` | `[FILL: SELECT COUNT(*) ...]` |
+| Successful DAG runs / total | `[FILL: from Airflow UI]` |
+| dbt tests | 24 passing (last run 7 Nov 2026) |
+| Latest data quality score | `[FILL: from data_quality_audit_log]` |
 
-- ✅ **Multi-source ingestion** - OpenWeatherMap + Open-Meteo APIs
-- ✅ **Cloud data warehouse** - Google BigQuery
-- ✅ **Modern transformation** - dbt Core with tests
-- ✅ **Data quality** - Great Expectations framework
-- ✅ **Orchestration** - Apache Airflow with Docker
-- ✅ **Batch processing** - Scheduled every 6 hours
-- ✅ **Cost-optimized** - Stays within GCP free tier
-- ✅ **Production patterns** - Idempotent, monitored, tested
+![Airflow DAG graph](docs/images/airflow-dag.png)
+![dbt lineage](docs/images/dbt-lineage.png)
+![Dashboard](docs/images/dashboard.png)
 
-## 🏗️ Architecture
+## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                     DATA SOURCES                            │
-├─────────────────────────────────────────────────────────────┤
-│  OpenWeatherMap API  │  Open-Meteo API                      │
-└──────────────┬──────────────────┬───────────────────────────┘
-               │                  │
-               v                  v
-┌─────────────────────────────────────────────────────────────┐
-│              ORCHESTRATION LAYER                            │
-│         Apache Airflow (Docker Compose)                     │
-│                                                             │
-│  ┌──────────────────────────────────────────────────┐     │
-│  │  DAG: weather_ingestion_pipeline                 │     │
-│  │  Schedule: Every 6 hours (0 */6 * * *)          │     │
-│  │                                                   │     │
-│  │  Tasks:                                          │     │
-│  │  1. fetch_openweather → validate_raw_data       │     │
-│  │  2. fetch_openmeteo → validate_raw_data         │     │
-│  │  3. validate_raw_data → load_to_bigquery        │     │
-│  │  4. load_to_bigquery → run_dbt_transformations  │     │
-│  │  5. run_dbt_transformations → data_quality_check│     │
-│  │  6. data_quality_check → notify_completion      │     │
-│  └──────────────────────────────────────────────────┘     │
-└──────────────┬──────────────────────────────────────────────┘
-               │
-               v
-┌─────────────────────────────────────────────────────────────┐
-│                  DATA WAREHOUSE LAYER                       │
-│                    Google BigQuery                          │
-│                                                             │
-│  Dataset: weather_data                                      │
-│                                                             │
-│  ┌─────────────────────────────────────────────┐          │
-│  │  RAW LAYER (Staging)                        │          │
-│  │  • raw_openweather (partitioned by date)    │          │
-│  │  • raw_openmeteo (partitioned by date)      │          │
-│  └─────────────────────────────────────────────┘          │
-│                      │                                      │
-│                      │ dbt transformations                  │
-│                      v                                      │
-│  ┌─────────────────────────────────────────────┐          │
-│  │  TRANSFORMED LAYER                          │          │
-│  │  • stg_weather_unified (standardized)       │          │
-│  │  • dim_cities (dimension table)             │          │
-│  │  • dim_date (dimension table)               │          │
-│  │  • fact_weather_observations (fact table)   │          │
-│  │  • agg_daily_weather (aggregations)         │          │
-│  │  • agg_weekly_weather (aggregations)        │          │
-│  └─────────────────────────────────────────────┘          │
-└──────────────┬──────────────────────────────────────────────┘
-               │
-               v
-┌─────────────────────────────────────────────────────────────┐
-│                  VISUALIZATION LAYER                        │
-│                   Streamlit Dashboard                       │
-│                                                             │
-│  • Real-time weather metrics                               │
-│  • Temperature trends across cities                        │
-│  • Weather patterns analysis                               │
-│  • Data quality metrics                                    │
-│  • Pipeline monitoring stats                               │
-└─────────────────────────────────────────────────────────────┘
+OpenWeatherMap API
+        |
+        v
+Airflow DAG (every 6 hours, 2 retries, 5-minute delay)
+  fetch_weather
+    -> validate_data            (warns only; does not stop the run)
+    -> load_to_bigquery         (append to raw table, partitioned by day)
+    -> run_dbt_transformations  (dbt run, then dbt test)
+    -> run_data_quality_checks  (audit; critical failure stops the DAG)
+    -> log_summary
+        |
+        v
+BigQuery
+  weather_data           raw_weather_data
+  weather_data_staging   stg_weather_cleaned (view)
+  weather_data_marts     dim_cities, dim_dates, fact_weather_observations,
+                         agg_daily_weather, data_quality_audit_log
+        |
+        v
+Streamlit dashboard (current conditions, daily trends, quality log)
 ```
 
-## 🛠️ Tech Stack
+## Tech stack
 
-| Layer | Technology | Purpose |
-|-------|-----------|---------|
-| **Orchestration** | Apache Airflow 2.8+ | Workflow scheduling & monitoring |
-| **Data Warehouse** | Google BigQuery | Cloud-native data storage |
-| **Transformation** | dbt Core 1.7+ | Analytics engineering & testing |
-| **Data Quality** | Great Expectations 0.18+ | Data validation framework |
-| **Programming** | Python 3.11+ | Pipeline logic |
-| **Visualization** | Streamlit 1.30+ | Interactive dashboard |
-| **Containerization** | Docker & Docker Compose | Infrastructure as code |
-| **Version Control** | Git & GitHub | Code versioning |
+- Apache Airflow 2.8.1 (LocalExecutor), PostgreSQL 14 for Airflow metadata
+- Google BigQuery (region `asia-southeast2`)
+- dbt Core with `dbt-bigquery` 1.7.4
+- Python, `requests`, `google-cloud-bigquery`
+- Streamlit and Plotly for the dashboard
+- Docker and Docker Compose
 
-## 📍 Coverage
+## Data model
 
-**Indonesian Cities (5):**
-- Jakarta (Capital, Java)
-- Surabaya (East Java)
-- Bandung (West Java)
-- Medan (Sumatra)
-- Makassar (Sulawesi)
+| Layer | Model | Notes |
+|-------|-------|-------|
+| Raw | `raw_weather_data` | Appended on every run; table partitioned by day on `timestamp` |
+| Staging | `stg_weather_cleaned` | Casts types, filters null cities and timestamps, builds `observation_id` (MD5 of city and timestamp), and removes duplicates with `QUALIFY ROW_NUMBER()` |
+| Marts | `dim_cities`, `dim_dates` | Dimensions with MD5 surrogate keys |
+| Marts | `fact_weather_observations` | Partitioned by `observation_date`, clustered by `city_id` and `weather_main` |
+| Marts | `agg_daily_weather` | Daily average, min and max temperature, humidity, pressure, wind speed, and dominant weather per city |
 
-## 🚀 Quick Start
+dbt tests cover `not_null`, `unique`, and `relationships` on the staging and mart models (24 tests).
+
+## Data quality
+
+Quality is checked in three places:
+
+1. **In the DAG (`validate_data`)**: required fields and plausible ranges for each record. It only logs warnings.
+2. **In dbt**: `not_null`, `unique`, and `relationships` tests run after every `dbt run`. A failing test fails the task.
+3. **Audit (`WeatherQualityChecker`)**: runs after dbt and writes every result to `weather_data_marts.data_quality_audit_log`.
+   - **Freshness**: the latest observation must be within the 7-hour SLA
+   - **Completeness**: all five expected cities must be present
+   - **Climate range**: temperature 15-45 °C, humidity 20-100%, pressure 900-1100 hPa
+   - Each check scores PASS (100), WARN (50) or FAIL (0), and the overall score is the average. A critical failure raises an error and stops the DAG.
+
+## Getting started
 
 ### Prerequisites
-- Docker & Docker Compose installed
-- Python 3.11+
-- Google Cloud Platform account (free tier)
-- API keys (free):
-  - OpenWeatherMap API key
-  - Open-Meteo (no key required)
 
-### Installation
+- Docker and Docker Compose
+- An [OpenWeatherMap](https://openweathermap.org/api) API key
+- A Google Cloud project with BigQuery enabled and a service account key (JSON)
+
+### Setup
 
 ```bash
-# Clone repository
-git clone <repository-url>
-cd data-engineer
+git clone https://github.com/uca-spider/weather-data-engineering.git
+cd weather-data-engineering
 
-# Setup GCP credentials
-# Follow SETUP.md for detailed instructions
-
-# Configure environment
 cp .env.example .env
-# Edit .env with your credentials
+# Edit .env: GCP_PROJECT_ID, OPENWEATHER_API_KEY, and the Airflow login
 
-# Start infrastructure
-docker-compose up -d
+# Put your service account key here (this folder is git-ignored)
+mkdir -p credentials
+cp /path/to/your-key.json credentials/gcp-credentials.json
+```
 
-# Access Airflow UI
-open http://localhost:8080
-# Default: airflow / airflow
+Create the dbt datasets once, then start Airflow:
 
-# Access Streamlit Dashboard
+```bash
+python src/setup_dbt_datasets.py       # creates the staging and marts datasets
+docker compose up airflow-init
+docker compose up -d
+```
+
+Open Airflow at <http://localhost:8080>, log in with the user you set in `.env`, unpause `weather_ingestion_pipeline`, and trigger a run.
+
+### Dashboard
+
+```bash
+pip install -r requirements-dashboard.txt
 streamlit run src/dashboard/app.py
 ```
 
-For detailed setup instructions, see [SETUP.md](SETUP.md)
+The dashboard has three tabs: current weather by city, daily aggregation trends, and the data quality audit log.
 
-## 📂 Project Structure
+> Never commit `.env` or anything in `credentials/`. Both are listed in `.gitignore`.
+
+## Project structure
 
 ```
-data-engineer/
-├── airflow/                    # Airflow configuration
-│   ├── dags/                   # DAG definitions
-│   │   ├── weather_pipeline.py
-│   │   └── utils/
-│   ├── plugins/                # Custom operators
-│   └── config/                 # Airflow configs
-│
-├── dbt/                        # dbt project
-│   ├── models/                 # SQL transformations
-│   │   ├── staging/            # Staging models
-│   │   ├── marts/              # Business logic layer
-│   │   └── schema.yml          # Tests & documentation
-│   ├── macros/                 # Reusable SQL functions
-│   ├── tests/                  # Custom tests
-│   └── dbt_project.yml
-│
-├── great_expectations/         # Data quality
-│   ├── expectations/           # Validation rules
-│   ├── checkpoints/            # Validation checkpoints
-│   └── great_expectations.yml
-│
-├── src/                        # Source code
-│   ├── ingestion/              # Data ingestion logic
-│   │   ├── openweather.py
-│   │   └── openmeteo.py
-│   ├── validation/             # Data validation
-│   ├── dashboard/              # Streamlit app
-│   └── utils/                  # Shared utilities
-│
-├── tests/                      # Unit tests
-│   ├── test_ingestion.py
-│   └── test_transformations.py
-│
-├── docs/                       # Documentation
-│   ├── ARCHITECTURE.md         # Architecture details
-│   ├── SETUP.md                # Setup guide
-│   ├── COST_ESTIMATE.md        # Cost analysis
-│   └── API_DOCS.md             # API documentation
-│
-├── docker-compose.yml          # Infrastructure definition
-├── Dockerfile                  # Custom images
-├── requirements.txt            # Python dependencies
-├── .env.example                # Environment template
-└── README.md                   # This file
+weather-data-engineering/
+├── airflow/dags/
+│   └── weather_ingestion_pipeline.py   # Production DAG
+├── dbt/weather_dbt/
+│   ├── models/staging/                 # stg_weather_cleaned + sources and tests
+│   └── models/marts/                   # dim, fact and aggregate models + tests
+├── src/
+│   ├── ingestion/                      # API fetcher and BigQuery loader
+│   ├── validation/                     # WeatherQualityChecker
+│   └── dashboard/                      # Streamlit app
+├── docs/                               # Architecture, setup, and notes
+├── docker-compose.yml
+├── Dockerfile                          # Airflow image with dbt installed
+├── .env.example
+└── requirements.txt
 ```
 
-## 📈 Pipeline Schedule
+## Design decisions and trade-offs
 
-- **Frequency**: Every 6 hours
-- **Schedule**: `0 */6 * * *` (00:00, 06:00, 12:00, 18:00 UTC)
-- **Runtime**: ~5-10 minutes per run
-- **Data volume**: ~600 records/month
+- **Append to raw, deduplicate in dbt.** The loader uses `insert_rows_json` (streaming inserts) and never updates rows. Duplicates are removed in the staging layer. The raw table is a full history, but the loader itself is not idempotent. Re-running a failed task can add duplicate raw rows, which dbt then removes.
+- **Partitioning and clustering.** The raw table is partitioned by day, and the fact table is partitioned by date and clustered by city and weather type, to limit the data scanned by dashboard queries.
+- **Quality gate after dbt.** The audit reads the marts, so it checks what the dashboard actually shows, and a stale or incomplete load stops the pipeline.
+- **6-hour schedule.** Weather changes slowly, and 6 hours keeps API calls and BigQuery usage small.
 
-## 💰 Cost Analysis
+## Limitations
 
-This project is designed to stay within **GCP free tier**:
+- Runs locally; there is no cloud deployment or alerting yet
+- Single data source (OpenWeatherMap) and five cities
+- The loader uses streaming inserts and is not idempotent (see above)
+- `validate_data` only warns; the real stopping gate is the audit
+- No unit tests for the Python code yet (the dbt tests are the automated checks)
+- Great Expectations is not used; quality checks are custom
 
-| Resource | Monthly Usage | Cost |
-|----------|--------------|------|
-| BigQuery Storage | ~15MB | $0 (< 10GB free) |
-| BigQuery Queries | ~100MB | $0 (< 1TB free) |
-| **Total** | | **$0/month** |
+## Roadmap
 
-See [COST_ESTIMATE.md](docs/COST_ESTIMATE.md) for detailed breakdown.
+- [ ] Unit tests for the fetcher, loader and quality checker (pytest), run in GitHub Actions
+- [ ] Make the load idempotent (load jobs or `MERGE` on `observation_id`)
+- [ ] Add alerts on audit failure (email or chat webhook)
+- [ ] Add a second data source (for example Open-Meteo) and cross-source checks
+- [ ] Deploy the dashboard
 
-## 🧪 Data Quality Checks
+## Acknowledgements
 
-Great Expectations validations:
-- ✅ Schema validation (expected columns, types)
-- ✅ Null checks (mandatory fields)
-- ✅ Range validation (temperature, humidity ranges)
-- ✅ Freshness checks (data recency)
-- ✅ Uniqueness constraints
-- ✅ Cross-source consistency
-
-## 📊 Dashboard Features
-
-Streamlit dashboard provides:
-- Current weather conditions for all cities
-- Temperature trends (7-day, 30-day)
-- Weather patterns comparison
-- Data pipeline health metrics
-- Data quality score
-- API performance monitoring
-
-## 🔍 Monitoring
-
-- Airflow UI for pipeline monitoring
-- BigQuery audit logs
-- Great Expectations validation reports
-- Streamlit metrics dashboard
-
-## 🧪 Testing
-
-```bash
-# Run unit tests
-pytest tests/
-
-# Run dbt tests
-cd dbt && dbt test
-
-# Run data quality validations
-great_expectations checkpoint run weather_checkpoint
-```
-
-## 📚 Documentation
-
-- [Architecture Documentation](docs/ARCHITECTURE.md)
-- [Setup Guide](docs/SETUP.md)
-- [Cost Estimate](docs/COST_ESTIMATE.md)
-- [API Documentation](docs/API_DOCS.md)
-
-## 🎓 Learning Outcomes
-
-This project demonstrates:
-1. **Data Engineering Fundamentals** - ETL/ELT patterns
-2. **Cloud Data Warehousing** - BigQuery best practices
-3. **Modern Data Stack** - Airflow + dbt + Great Expectations
-4. **Data Quality** - Validation frameworks
-5. **Analytics Engineering** - Dimensional modeling
-6. **DevOps** - Containerization, IaC
-7. **Cost Optimization** - Free tier architecture
-8. **Production Patterns** - Idempotency, monitoring, testing
-
-## 🚧 Future Enhancements
-
-- [ ] Add CI/CD pipeline (GitHub Actions)
-- [ ] Implement data lineage tracking
-- [ ] Add alerting (email/Slack notifications)
-- [ ] Create data catalog documentation
-- [ ] Add more cities and countries
-- [ ] Implement incremental loading strategies
-- [ ] Add machine learning predictions
-- [ ] Deploy to cloud (Cloud Composer)
-
-## 📝 License
-
-MIT License - See LICENSE file for details
-
-## 👤 Author
-
-Portfolio project for demonstrating data engineering skills.
-
-**Technologies showcased**: Apache Airflow • BigQuery • dbt • Great Expectations • Python • Docker • Streamlit
-
----
-
-**⭐ If this project helps your learning, please star it!**
+Weather data from [OpenWeatherMap](https://openweathermap.org/).
