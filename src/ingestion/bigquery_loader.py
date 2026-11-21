@@ -113,9 +113,11 @@ class BigQueryLoader:
         # ter-materialisasi dan bisa dibaca dbt di tahap berikutnya.
         # Streaming insert mendarat di buffer yang bisa telat beberapa detik,
         # membuat dbt membangun marts tanpa baris baru (race condition).
+        existing_table = self.client.get_table(self.full_table_id)
         job_config = bigquery.LoadJobConfig(
             write_disposition=bigquery.WriteDisposition.WRITE_APPEND,
             source_format=bigquery.SourceFormat.NEWLINE_DELIMITED_JSON,
+            schema=existing_table.schema,
         )
         load_job = self.client.load_table_from_json(
             data, self.full_table_id, job_config=job_config
