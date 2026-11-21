@@ -1,0 +1,42 @@
+name: Weather Ingestion & Transformation Pipeline
+
+on:
+  schedule:
+    # Berjalan setiap 6 jam: 00:00, 06:00, 12:00, 18:00 UTC
+    - cron: '0 */6 * * *'
+  workflow_dispatch: # Memungkinkan tombol manual "Run workflow" di GitHub UI
+
+jobs:
+  run-pipeline:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install db-dtypes pyarrow
+
+      - name: Authenticate Google Cloud Service Account
+        run: |
+          mkdir -p credentials
+          echo "${{ secrets.GCP_SA_KEY }}" > credentials/gcp-credentials.json
+          chmod 600 credentials/gcp-credentials.json
+
+      - name: Execute End-to-End Pipeline
+        env:
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          GCP_DATASET_ID: "weather_data"
+          OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ github.workspace }}/credentials/gcp-credentials.json
+        run: |
+          python src/pipeline_runner.py

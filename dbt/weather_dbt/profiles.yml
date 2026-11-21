@@ -7,7 +7,7 @@ weather_dbt:
       project: weather-513509
       dataset: weather_data_staging
       threads: 4
-      keyfile: /opt/airflow/credentials/gcp-credentials.json
+      keyfile: "{{ env_var('GOOGLE_APPLICATION_CREDENTIALS', '/opt/airflow/credentials/gcp-credentials.json') }}"
       location: asia-southeast2
       timeout_seconds: 300
       priority: interactive
