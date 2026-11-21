@@ -107,17 +107,28 @@ class BigQueryLoader:
             if isinstance(record['timestamp'], datetime):
                 record['timestamp'] = record['timestamp'].isoformat()
         
-        logger.info(f"Inserting {len(data)} records...")
+        logger.info(f"Loading {len(data)} records via load job...")
         
-        # Insert data
-        errors = self.client.insert_rows_json(self.full_table_id, data)
+        # Pakai load job (bukan streaming insert) agar data langsung
+        # ter-materialisasi dan bisa dibaca dbt di tahap berikutnya.
+        # Streaming insert mendarat di buffer yang bisa telat beberapa detik,
+        # membuat dbt membangun marts tanpa baris baru (race condition).
+        job_config = bigquery.LoadJobConfig(
+            write_disposition=bigquery.WriteDisposition.WRITE_APPEND,
+            source_format=bigquery.SourceFormat.NEWLINE_DELIMITED_JSON,
+        )
+        load_job = self.client.load_table_from_json(
+            data, self.full_table_id, job_config=job_config
+        )
+        load_job.result()  # Tunggu job selesai (sinkron)
         
-        if errors:
-            logger.error(f"❌ Errors inserting rows: {errors}")
+        if load_job.errors:
+            logger.error(f"❌ Errors loading rows: {load_job.errors}")
             return 0
-        else:
-            logger.info(f"✅ Successfully inserted {len(data)} records")
-            return len(data)
+        
+        logger.info(f"✅ Successfully loaded {len(data)} records")
+        return len(data)
+
     
     def get_latest_records(self, limit: int = 10) -> List[Dict]:
         """
