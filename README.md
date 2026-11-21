@@ -1,20 +1,19 @@
 # Weather Data Pipeline: OpenWeatherMap to BigQuery
 
-A batch ELT pipeline that collects current weather for five Indonesian cities every 6 hours, loads it into **BigQuery**, models it with **dbt**, and checks its health with an automated **data quality audit**. **Apache Airflow** (Docker Compose) orchestrates everything, and a **Streamlit** dashboard reads the results.
+A batch ELT pipeline that collects current weather for five Indonesian cities every 6 hours, loads it into **BigQuery**, models it with **dbt**, and checks its health with an automated **data quality audit**. It runs two ways: **Apache Airflow** (Docker Compose) locally, and **GitHub Actions** on a schedule in the cloud. A **Streamlit** dashboard reads the results.
 
-**Status:** runs end to end locally with Docker Compose. It has been running on a 6-hour schedule since 2 November 2026, with gaps when the local machine or its connection was off (see [Known failures](#known-failures)). It is a portfolio project, not a hosted service.
+**Status:** runs end to end two ways — locally with Docker Compose (Airflow), and in the cloud on **GitHub Actions** (scheduled every 6 hours). It has been collecting data since 2 November 2026. Moving the schedule to GitHub Actions removed the gaps that used to happen when the local machine was off (see [Known failures](#known-failures)). It is a portfolio project, not a hosted service.
 
 ## Results so far
 
-| Metric | Value (as of 7 Nov 2026) |
-|--------|--------------------------|
+| Metric | Value (as of 21 Nov 2026) |
+|--------|---------------------------|
 | Cities covered | 5 (Jakarta, Surabaya, Bandung, Medan, Makassar) |
-| Schedule | every 6 hours (`0 */6 * * *`, Asia/Jakarta time) |
-| Rows in `raw_weather_data` | 75 (5 cities × 15 loads), 2 Nov – 7 Nov 2026 |
-| Duplicate rows removed by dbt so far | 0 (75 raw rows, 75 unique observations) |
-| DAG runs | 14 successful of 16 (87.5%), including manual test runs |
+| Schedule | every 6 hours (`0 */6 * * *`) — GitHub Actions (UTC) and local Airflow (Asia/Jakarta) |
+| Rows in `raw_weather_data` | 145 (5 cities × 29 loads), 2 Nov – 21 Nov 2026 |
+| Duplicate rows removed by dbt so far | 0 (145 raw rows, 145 unique observations) |
 | dbt tests | 24 passing |
-| Latest data quality score | 100 / 100 (7 Nov 2026) |
+| Latest data quality score | 100 / 100 (21 Nov 2026) |
 
 ![Airflow DAG graph](docs/images/airflow-dag.png)
 ![dbt lineage](docs/images/dbt-lineage.png)
@@ -26,12 +25,15 @@ A batch ELT pipeline that collects current weather for five Indonesian cities ev
 OpenWeatherMap API
         |
         v
-Airflow DAG (every 6 hours, 2 retries, 5-minute delay)
+Orchestration — same ELT steps, two runners:
+  - GitHub Actions: cron every 6 hours -> src/pipeline_runner.py (cloud, no local machine needed)
+  - Airflow DAG (local, Docker): every 6 hours, 2 retries, 5-minute delay
+
   fetch_weather
-    -> validate_data            (warns only; does not stop the run)
-    -> load_to_bigquery         (append to raw table, partitioned by day)
+    -> validate_data            (warns only; does not stop the run) [Airflow DAG only]
+    -> load_to_bigquery         (BigQuery load job, append to raw table, partitioned by day)
     -> run_dbt_transformations  (dbt run, then dbt test)
-    -> run_data_quality_checks  (audit; critical failure stops the DAG)
+    -> run_data_quality_checks  (audit; critical failure stops the run)
     -> log_summary
         |
         v
@@ -48,6 +50,7 @@ Streamlit dashboard (current conditions, historical trends, data quality)
 ## Tech stack
 
 - Apache Airflow 2.8.1 (LocalExecutor), PostgreSQL 14 for Airflow metadata
+- GitHub Actions (scheduled cloud runner for the pipeline)
 - Google BigQuery (region `asia-southeast2`)
 - dbt Core with `dbt-bigquery` 1.7.4
 - Python, `requests`, `google-cloud-bigquery`
@@ -58,7 +61,7 @@ Streamlit dashboard (current conditions, historical trends, data quality)
 
 | Layer | Model | Notes |
 |-------|-------|-------|
-| Raw | `raw_weather_data` | Appended on every run; table partitioned by day on `timestamp` |
+| Raw | `raw_weather_data` | Appended on every run with a BigQuery load job; table partitioned by day on `timestamp` |
 | Staging | `stg_weather_cleaned` | Casts types, filters null cities and timestamps, builds `observation_id` (MD5 of city and timestamp), and removes duplicates with `QUALIFY ROW_NUMBER()` |
 | Marts | `dim_cities`, `dim_dates` | Dimensions with MD5 surrogate keys |
 | Marts | `fact_weather_observations` | Partitioned by `observation_date`, clustered by `city_id` and `weather_main` |
@@ -70,13 +73,13 @@ dbt tests cover `not_null`, `unique`, and `relationships` on the staging and mar
 
 Quality is checked in three places:
 
-1. **In the DAG (`validate_data`)**: required fields and plausible ranges for each record. It only logs warnings.
-2. **In dbt**: `not_null`, `unique`, and `relationships` tests run after every `dbt run`. A failing test fails the task.
-3. **Audit (`WeatherQualityChecker`)**: runs after dbt and writes every result to `weather_data_marts.data_quality_audit_log`.
-   - **Freshness**: the latest observation must be within the 7-hour SLA
+1. **In the Airflow DAG (`validate_data`)**: required fields and plausible ranges for each record. It only logs warnings, and runs only in the Airflow DAG (not in the GitHub Actions run).
+2. **In dbt**: `not_null`, `unique`, and `relationships` tests run after every `dbt run`. A failing test fails the step. Runs in both runners.
+3. **Audit (`WeatherQualityChecker`)**: runs after dbt in both runners, and writes every result to `weather_data_marts.data_quality_audit_log`.
+   - **Freshness**: the latest observation must be within the 7-hour SLA (measured in seconds, so freshly loaded data is never misreported as stale)
    - **Completeness**: all five expected cities must be present
    - **Climate range**: temperature 15-45 °C, humidity 20-100%, pressure 900-1100 hPa
-   - Each check scores PASS (100), WARN (50) or FAIL (0), and the overall score is the average. A critical failure raises an error and stops the DAG.
+   - Each check scores PASS (100), WARN (50) or FAIL (0), and the overall score is the average. A critical failure raises an error and stops the run.
 
 To read the overall score of the latest audit:
 
@@ -122,6 +125,18 @@ docker compose up -d
 
 Open Airflow at <http://localhost:8080>, log in with the user you set in `.env`, unpause `weather_ingestion_pipeline`, and trigger a run.
 
+### Run in the cloud (GitHub Actions)
+
+The same pipeline runs on a schedule in `.github/workflows/weather_pipeline.yml`, so it does not depend on the local machine being on. It calls `src/pipeline_runner.py`, which runs ingestion, dbt, and the quality audit in one process.
+
+Set three repository secrets (**Settings → Secrets and variables → Actions**):
+
+- `OPENWEATHER_API_KEY` — the OpenWeatherMap key
+- `GCP_PROJECT_ID` — the Google Cloud project id
+- `GCP_SA_KEY` — the full service account JSON
+
+Then trigger it from the **Actions** tab with **Run workflow**, or wait for the 6-hour schedule.
+
 ### Dashboard
 
 ```bash
@@ -141,54 +156,62 @@ Count DAG runs by state from the Airflow metadata database:
 docker compose exec -T postgres psql -U airflow -d airflow -c "SELECT run_type, state, COUNT(*) FROM dag_run WHERE dag_id='weather_ingestion_pipeline' GROUP BY run_type, state ORDER BY run_type, state;"
 ```
 
+For the cloud runner, check run history in the repository's **Actions** tab.
+
 ## Project structure
 
 ```
 weather-data-engineering/
+├── .github/workflows/
+│   └── weather_pipeline.yml            # Scheduled cloud pipeline (GitHub Actions)
 ├── airflow/dags/
-│   └── weather_ingestion_pipeline.py   # Ingestion DAG
+│   └── weather_ingestion_pipeline.py   # Ingestion DAG (local Airflow)
 ├── dbt/weather_dbt/
 │   ├── models/staging/                 # stg_weather_cleaned + sources and tests
 │   └── models/marts/                   # dim, fact and aggregate models + tests
 ├── src/
 │   ├── ingestion/                      # API fetcher and BigQuery loader
 │   ├── validation/                     # WeatherQualityChecker
-│   └── dashboard/                      # Streamlit app
+│   ├── dashboard/                      # Streamlit app
+│   └── pipeline_runner.py              # Standalone ELT runner for GitHub Actions
 ├── docs/images/                        # Screenshots used in this README
 ├── docker-compose.yml
 ├── Dockerfile                          # Airflow image with dbt installed
 ├── .env.example
-└── requirements.txt
+├── requirements.txt
+└── requirements-dashboard.txt          # Dashboard-only deps (Streamlit, Plotly, ...)
 ```
 
 ## Design decisions and trade-offs
 
-- **Append to raw, deduplicate in dbt.** The loader uses `insert_rows_json` (streaming inserts) and never updates rows. Duplicates are removed in the staging layer. The raw table is a full history, but the loader itself is not idempotent. Re-running a failed task can add duplicate raw rows, which dbt then removes. No duplicates have occurred so far (75 raw rows, 75 unique observations), so this mechanism is covered by dbt's `unique` test but not yet exercised by real duplicates.
+- **Append to raw, deduplicate in dbt.** The loader uses a BigQuery load job (`load_table_from_json` with `WRITE_APPEND`) and never updates rows. Duplicates are removed in the staging layer. The raw table is a full history, but the loader itself is not idempotent. Re-running a failed task can add duplicate raw rows, which dbt then removes. No duplicates have occurred so far (145 raw rows, 145 unique observations), so this mechanism is covered by dbt's `unique` test but not yet exercised by real duplicates. The loader originally used streaming inserts (`insert_rows_json`), but those land in a buffer that is not immediately visible, so dbt could rebuild the marts before the new rows were queryable; a load job makes the data available synchronously.
 - **Partitioning and clustering.** The raw table is partitioned by day, and the fact table is partitioned by date and clustered by city and weather type, to limit the data scanned by dashboard queries.
 - **Quality gate after dbt.** The audit reads the marts, so it checks what the dashboard actually shows, and a stale or incomplete load stops the pipeline.
+- **Freshness measured in seconds.** `TIMESTAMP_DIFF` in minutes rounds a just-loaded observation down to 0, and `0 or 9999` in Python then falls back to "no data"; measuring in seconds avoids that false alarm.
 - **6-hour schedule.** Weather changes slowly, and 6 hours keeps API calls and BigQuery usage small.
 
 ## Known failures
 
-Two of 16 runs failed (4 and 5 Nov 2026, the 18:00 WIB slot). In both cases `fetch_weather` failed on all three attempts with connection errors for every city within milliseconds. The cause was that the local machine was offline: the pipeline runs on a laptop that uses a mobile hotspot, which was switched off at that time of day. No data was loaded for those slots, and the downstream tasks were marked `upstream_failed`. The current-weather endpoint cannot be backfilled, so those slots remain gaps in the data.
+Two of 16 early runs failed (4 and 5 Nov 2026, the 18:00 WIB slot). In both cases `fetch_weather` failed on all three attempts with connection errors for every city within milliseconds. The cause was that the local machine was offline: the pipeline ran on a laptop that uses a mobile hotspot, which was switched off at that time of day. No data was loaded for those slots, and the downstream tasks were marked `upstream_failed`. The current-weather endpoint cannot be backfilled, so those slots remain gaps in the data.
+
+Since 21 November 2026 the pipeline also runs on GitHub Actions, which is not tied to the local machine, so that recurring gap no longer happens.
 
 ## Limitations
 
-- Runs on a laptop over a mobile hotspot, so the schedule has gaps whenever the machine or the connection is off
 - Missed slots cannot be backfilled, because the API returns only current conditions
 - Single data source (OpenWeatherMap) and five cities, so the data volume is small (about 20 rows per day)
-- The loader uses streaming inserts and is not idempotent (see above)
-- `validate_data` only warns; the real stopping gate is the audit
+- The loader is not idempotent: a retried run can append duplicate raw rows, which dbt then deduplicates
+- `validate_data` runs only in the Airflow DAG, not in the GitHub Actions run
 - No unit tests for the Python code yet (the dbt tests are the automated checks)
 - Great Expectations is not used; quality checks are custom
-- No alerting; failures are visible only in the Airflow UI
+- No alerting; failures are visible only in the Airflow UI or the GitHub Actions run log
 
 ## Roadmap
 
+- [x] Run the pipeline on an always-on host so the schedule has no gaps — done via GitHub Actions (21 Nov 2026)
+- [ ] Make the load fully idempotent (`MERGE` on `observation_id`; the loader now uses a load job but still appends)
 - [ ] Unit tests for the fetcher, loader and quality checker (pytest), run in GitHub Actions
-- [ ] Log the underlying exception for connection errors in the fetcher, so the cause is visible in the Airflow logs
-- [ ] Make the load idempotent (load jobs or `MERGE` on `observation_id`)
-- [ ] Run the pipeline on an always-on host so the schedule has no gaps
+- [ ] Log the underlying exception for connection errors in the fetcher
 - [ ] Add alerts on audit or task failure (email or chat webhook)
 - [ ] Evaluate a second data source with historical data (for example Open-Meteo) for backfill and cross-source checks
 - [ ] Deploy the dashboard
