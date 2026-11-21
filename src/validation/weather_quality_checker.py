@@ -49,12 +49,20 @@ class WeatherQualityChecker:
         """Pilar 1: Freshness SLA - Data terbaru tidak boleh lebih tua dari 7 jam."""
         query = f"""
             SELECT 
-                TIMESTAMP_DIFF(CURRENT_TIMESTAMP(), MAX(observation_timestamp), MINUTE) AS minutes_since_last
+                TIMESTAMP_DIFF(CURRENT_TIMESTAMP(), MAX(observation_timestamp), SECOND) AS seconds_since_last
             FROM `{self.fact_table_id}`
         """
         result = list(self.client.query(query).result())[0]
-        minutes_ago = result["minutes_since_last"] or 9999
-        hours_ago = round(minutes_ago / 60.0, 2)
+        seconds_since_last = result["seconds_since_last"]
+        # Pakai SECOND lalu bagi ke jam. Kalau pakai MINUTE, data yang baru masuk
+        # < 1 menit menghasilkan 0, dan `0 or 9999` (0 itu falsy di Python) keliru
+        # dianggap "tidak ada data" -> fallback 9999 menit = 166.65 jam.
+        # Cek None secara eksplisit: hanya tabel fact yang benar-benar kosong
+        # yang layak dianggap pelanggaran freshness maksimal.
+        if seconds_since_last is None:
+            hours_ago = 9999.0
+        else:
+            hours_ago = round(seconds_since_last / 3600.0, 2)
         
         sla_hours = 7.0
         if hours_ago <= sla_hours:
