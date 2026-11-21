@@ -27,9 +27,11 @@ jobs:
           pip install db-dtypes pyarrow
 
       - name: Authenticate Google Cloud Service Account
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
         run: |
           mkdir -p credentials
-          echo "${{ secrets.GCP_SA_KEY }}" > credentials/gcp-credentials.json
+          echo "$GCP_SA_KEY" > credentials/gcp-credentials.json
           chmod 600 credentials/gcp-credentials.json
 
       - name: Execute End-to-End Pipeline
