@@ -201,11 +201,12 @@ Since 21 November 2026 the pipeline also runs on GitHub Actions, which is not ti
 
 - Missed slots cannot be backfilled, because the API returns only current conditions
 - GitHub Actions scheduled runs are best-effort: observed delays up to ~47 minutes and occasional dropped runs, especially at the top of the hour
-- Single data source (OpenWeatherMap) and five cities, so the data volume is small (about 20 rows per day)
+- Single data source (OpenWeatherMap) and five cities, so the data volume is small (5 rows per run; about 8 rows per day observed, 175 rows in 21 days, because 20 per day is only the nominal 4 runs x 5 cities)
 - The loader is not idempotent: a retried run can append duplicate raw rows, which dbt then deduplicates
 - `validate_data` runs only in the Airflow DAG, not in the GitHub Actions run
 - No unit tests for the Python code yet (the dbt tests are the automated checks)
 - Great Expectations is not used; quality checks are custom
+- Authentication differs by runner: GitHub Actions uses a long-lived service-account key stored in repository secrets (`GCP_SA_KEY`). Workload Identity Federation would avoid the stored key and is not set up for this repo
 - No alerting; failures are visible only in the Airflow UI or the GitHub Actions run log
 
 ## Roadmap
