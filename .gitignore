@@ -218,3 +218,7 @@ site/
 node_modules/
 package-lock.json
 yarn.lock
+
+
+
+dbt/**/.user.yml

@@ -77,12 +77,12 @@ gcloud services enable bigquerydatatransfer.googleapis.com
 2. Click your project name
 3. Click "CREATE DATASET"
    - Dataset ID: weather_data
-   - Location: us-central1 (or closest to you)
+   - Location: choose one region and keep it for all later steps
    - Default table expiration: Never
 4. Click "CREATE DATASET"
 
 # Or via bq CLI
-bq --location=us-central1 mk --dataset weather_data
+bq --location=<your-region> mk --dataset weather_data
 ```
 
 ### 5. Create Service Account
@@ -157,12 +157,6 @@ chmod 600 credentials/gcp-credentials.json
 4. Copy your API key
 5. Free tier: 1,000 calls/day (sufficient for this project)
 
-### Open-Meteo API
-
-- **No API key required!** ✅
-- Open source weather API
-- Free unlimited access
-
 ---
 
 ## Local Environment
@@ -170,8 +164,8 @@ chmod 600 credentials/gcp-credentials.json
 ### 1. Clone Repository
 
 ```bash
-git clone <your-repo-url>
-cd data-engineer
+git clone https://github.com/uca-spider/weather-data-engineering.git
+cd weather-data-engineering
 ```
 
 ### 2. Create Virtual Environment
@@ -199,8 +193,7 @@ pip install --upgrade pip
 # Install requirements
 pip install -r requirements.txt
 
-# Verify installations
-python -c "import airflow; print(airflow.__version__)"
+# Verify installation (Airflow itself runs inside Docker, not in this venv)
 python -c "import google.cloud.bigquery; print('BigQuery client OK')"
 ```
 
@@ -224,20 +217,13 @@ GOOGLE_APPLICATION_CREDENTIALS=/opt/airflow/credentials/gcp-credentials.json
 # API Keys
 OPENWEATHER_API_KEY=your_openweathermap_api_key_here
 
-# Cities (comma-separated)
-CITIES=Jakarta,Surabaya,Bandung,Medan,Makassar
-
-# Airflow Configuration
+# Airflow
 AIRFLOW_UID=50000
-AIRFLOW__CORE__EXECUTOR=LocalExecutor
-AIRFLOW__CORE__LOAD_EXAMPLES=False
-AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=True
-
-# Database (for Airflow metadata)
-POSTGRES_USER=airflow
-POSTGRES_PASSWORD=airflow
-POSTGRES_DB=airflow
 ```
+
+Airflow executor and metadata database settings are defined in `docker-compose.yml`.
+`.env.example` contains more entries than the code reads; the ones above are the
+ones actually used.
 
 ---
 
@@ -279,7 +265,7 @@ docker-compose ps
 # Open browser
 http://localhost:8080
 
-# Default credentials
+# Local default login created by docker-compose.yml (change it if the port is exposed):
 Username: airflow
 Password: airflow
 ```
@@ -331,8 +317,6 @@ print(f"Status: {response.status_code}")
 print(f"Response: {response.json()}")
 EOF
 
-# Test Open-Meteo
-curl "https://api.open-meteo.com/v1/forecast?latitude=-6.2088&longitude=106.8456&current_weather=true"
 ```
 
 ### 4. Run Test DAG
@@ -390,7 +374,7 @@ gcloud projects get-iam-policy weather-data-engineering \
 
 ```bash
 # Check DAG for syntax errors
-docker-compose exec airflow-webserver python /opt/airflow/dags/weather_pipeline.py
+docker-compose exec airflow-webserver python /opt/airflow/dags/weather_ingestion_pipeline.py
 
 # Refresh DAGs
 docker-compose exec airflow-webserver airflow dags reserialize
@@ -402,8 +386,8 @@ docker-compose exec airflow-webserver airflow dags reserialize
 # Check remaining calls
 # Response header: X-RateLimit-Remaining
 
-# Reduce frequency in DAG if needed
-# Change schedule from */6 to */12 hours
+# The DAG runs 4 times a day x 5 cities = 20 calls/day, far below the limit.
+# If you hit it anyway, check for repeated manual triggers.
 ```
 
 ### Issue: Port 8080 already in use
@@ -419,6 +403,15 @@ lsof -i :8080
 # ports:
 #   - "8081:8080"
 ```
+
+---
+
+## Running in GitHub Actions instead
+
+The scheduled run in `.github/workflows/weather_pipeline.yml` needs no Docker.
+Add the repository secrets `GCP_SA_KEY` (service-account JSON), `GCP_PROJECT_ID` and
+`OPENWEATHER_API_KEY`, then trigger it from the Actions tab. The dataset name
+(`weather_data`) is fixed in the workflow file.
 
 ---
 
