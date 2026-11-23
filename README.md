@@ -1,5 +1,13 @@
 # Weather Data Pipeline: OpenWeatherMap to BigQuery
 
+[![Pipeline](https://github.com/uca-spider/weather-data-engineering/actions/workflows/weather_pipeline.yml/badge.svg)](https://github.com/uca-spider/weather-data-engineering/actions/workflows/weather_pipeline.yml)
+[![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/downloads/release/python-3110/)
+[![BigQuery](https://img.shields.io/badge/Google_Cloud-BigQuery-red.svg)](https://cloud.google.com/bigquery)
+[![dbt-bigquery](https://img.shields.io/badge/dbt--bigquery-1.7-orange.svg)](https://www.getdbt.com/)
+[![Airflow](https://img.shields.io/badge/Airflow-2.8-017CEE.svg)](https://airflow.apache.org/)
+[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED.svg)](https://www.docker.com/)
+[![Streamlit](https://img.shields.io/badge/Streamlit-dashboard-FF4B4B.svg)](https://streamlit.io/)
+
 A batch ELT pipeline that collects current weather for five Indonesian cities every 6 hours, loads it into **BigQuery**, models it with **dbt**, and checks its health with an automated **data quality audit**. It runs two ways: **Apache Airflow** (Docker Compose) locally, and **GitHub Actions** on a schedule in the cloud. A **Streamlit** dashboard reads the results.
 
 **Status:** runs end to end two ways — locally with Docker Compose (Airflow), and in the cloud on **GitHub Actions** (scheduled every 6 hours). It has been collecting data since 2 November 2026. Moving the schedule to GitHub Actions removed the gaps caused by the local machine being off, though GitHub Actions scheduled triggers are best-effort and occasionally skip a run (see [Known failures](#known-failures)). It is a portfolio project, not a hosted service.
